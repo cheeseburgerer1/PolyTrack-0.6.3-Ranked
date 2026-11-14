@@ -74,12 +74,51 @@ function fingerprint(directory) {
     html = replaceRequired(html, /<script type="application\/ld\+json">[\s\S]*?<\/script>/, '');
     html = html.replace(/^\s*<(?:meta (?:property="og:|name="twitter:)[^>]+|link rel="canonical"[^>]+)>/gm, '');
     html = replaceRequired(html, /<script>\s*window\.POLYTRACK_TURN_BROKER_URL[\s\S]*?<\/script>/, `<script>\n      window.polytrackModConfiguration = { modName: 'PolyTrack Ranked', author: 'StaticQuasar931' };\n      window.POLYTRACK_DIRECT_PUBLIC_READS = false;\n      window.RTCPeerConnection = undefined;\n      window.webkitRTCPeerConnection = undefined;\n    </script>`);
-    html = replaceRequired(html, /<body>/, `<body>\n    <aside aria-label="About this version" style="position:fixed;left:12px;right:12px;bottom:8px;z-index:10000;pointer-events:none;text-align:center;color:#fff;font:12px/1.5 system-ui;text-shadow:0 1px 3px #000,0 1px 5px #000"><span style="background:#161e3fe8;border-radius:6px;padding:4px 8px;display:inline-block">${notice}<br>${attribution} Local racing and archived standings.<br><a href="https://lsite-plus.onrender.com/#games" style="pointer-events:auto">Back to lsite plus</a></span></aside>`);
-    return html.replaceAll('target="_blank" rel="noopener noreferrer"', 'target="_blank" rel="noopener noreferrer" style="pointer-events:auto"');
+    html = replaceRequired(html, /(<div id="staticMenu"[^>]*>\s*<a[^>]*>STATIC \/ GAMES<\/a>)/, '$1\n      <a href="https://lsite-plus.onrender.com/#games">Back to lsite plus</a>\n      <button type="button" id="lsite-open-credits" aria-haspopup="dialog" aria-controls="lsite-game-credits">Game credits</button>');
+    html = replaceRequired(html, /<div id="transition-layer"><\/div>/, `<div id="transition-layer"></div>
+    <dialog id="lsite-game-credits" aria-labelledby="lsite-game-credits-title">
+      <h2 id="lsite-game-credits-title">Game credits</h2>
+      <p>${notice}</p>
+      <p>${attribution}</p>
+      <p><a href="https://www.kodub.com/games/polytrack" target="_blank" rel="noopener noreferrer">PolyTrack on Kodub.com</a></p>
+      <button type="button" id="lsite-close-credits" autofocus>Close</button>
+    </dialog>`);
+    html = replaceRequired(html, /      window.addEventListener\('beforeunload'/, `      const lsiteCredits = document.getElementById('lsite-game-credits');
+      document.getElementById('lsite-open-credits').addEventListener('click', () => lsiteCredits.showModal());
+      document.getElementById('lsite-close-credits').addEventListener('click', () => lsiteCredits.close());
+
+      window.addEventListener('beforeunload'`);
+    return replaceRequired(html, /      @keyframes menuEnter/, `      #staticMenu { flex-wrap:wrap; gap:4px; max-width:calc(100% - 24px); pointer-events:none; }\n      #staticMenu a, #lsite-open-credits { pointer-events:auto; }
+      #lsite-open-credits { padding:0 10px; border:0; background:#1e2d5be6; color:inherit; font:inherit; cursor:pointer; }
+      .menu-ui > .warning-message.lsite-original-link, .menu > .warning-message.lsite-original-link {
+        box-sizing:border-box; padding:0 12px; font:clamp(11px, 1.35vw, 14px)/1.45 system-ui,sans-serif;
+        color:#dceaff; text-align:center;
+      }
+      .lsite-original-link a {
+        color:inherit; font:inherit; text-decoration:underline; pointer-events:auto;
+      }
+      #lsite-game-credits {
+        box-sizing:border-box; width:min(480px, calc(100% - 32px)); margin:auto; padding:20px;
+        border:1px solid #88a9dc; border-radius:8px; background:#172448; color:#edf5ff;
+        font:15px/1.55 system-ui,sans-serif; overflow-wrap:anywhere;
+      }
+      #lsite-game-credits::backdrop { background:#000a; }
+      #lsite-game-credits h2, #lsite-game-credits p { margin:0 0 12px; }
+      #lsite-game-credits a { color:#bce0ff; }
+      #lsite-game-credits button { padding:6px 14px; font:inherit; cursor:pointer; }
+      @keyframes menuEnter`);
   });
 
   edit('about.html', html => replaceRequired(html, /<link rel="canonical"[^>]*>/, '<meta name="robots" content="noindex, nofollow">\n    <meta name="referrer" content="no-referrer">').replace('</footer>', `<p>${notice}</p><p>${attribution}</p></footer>`));
-  edit('polytrack_062_patch.js', js => replaceRequired(js, /endpoint:module\.CANONICAL_SITE_VERSION_URL/, "endpoint:new URL('../site-version.json',eventsModuleUrl).href"));
+  edit('polytrack_062_patch.js', js => {
+    js = replaceRequired(js, /endpoint:module\.CANONICAL_SITE_VERSION_URL/, "endpoint:new URL('../site-version.json',eventsModuleUrl).href");
+    return replaceRequired(js, /  function setUnofficialMessage\(\)\{[\s\S]*?\r?\n  \}(?=\r?\n\r?\n  let footerVisibilityObserver)/, `  function setUnofficialMessage(){
+    const warning = document.querySelector('.menu-ui .warning-message, .menu .warning-message');
+    if (!warning || warning.querySelector('[data-lsite-original-link]')) return;
+    warning.classList.add('lsite-original-link');
+    warning.innerHTML = '<a data-lsite-original-link href="${official}" target="_blank" rel="noopener noreferrer">Play the original version</a>';
+  }`);
+  });
   edit('tools/snapshot-update-check.mjs', js => {
     js = replaceRequired(js, /const POINTER = '[^']+';\r?\nconst CURRENT = '[^']+';/, "const CURRENT = new URL('../snapshot-current.json', import.meta.url).href;");
     return replaceRequired(js, /Object\.freeze\(\[POINTER, CURRENT\]\)/, 'Object.freeze([CURRENT])');
@@ -93,7 +132,7 @@ function fingerprint(directory) {
   }
   writeFileSync(join(output, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
   const actualFingerprint = fingerprint(output);
-  const reviewedFingerprint = 'f3802b1b76e5b9ea13f8736d2afcdc5725f663d0787e8a03442db2e793da41ce';
+  const reviewedFingerprint = 'f91db3143a612eb8b889e8d054dafc1be5c7a718fac53547e02fac7feb2833b0';
   if (!localSource && actualFingerprint !== reviewedFingerprint) throw new Error(`Game assets differ from the reviewed build of ${revision}: ${actualFingerprint}`);
   console.log(`Prepared the static browser build of ${revision} (${actualFingerprint}).`);
 }
