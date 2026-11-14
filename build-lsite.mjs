@@ -1,14 +1,11 @@
-import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
+import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 
 const revision = 'fbe8ad03abc7aef2d2d95a4e573c03ab30c8d3c3';
 const output = resolve(process.argv[3] || 'lsite-build');
-const scratch = mkdtempSync(join(tmpdir(), 'lsite-racing-'));
-const checkout = join(scratch, 'source');
 const localSource = process.argv[2];
-const source = localSource ? resolve(localSource) : checkout;
+const source = resolve(localSource || '.');
 const assetDirs = ['audio', 'images', 'lib', 'licenses', 'models', 'public-snapshots81', 'tracks'];
 const topFiles = ['THIRD_PARTY_NOTICES.md', 'index.html', 'about.html', 'manifest.json', 'forced_square.json', 'forced_square.woff2',
   'help-controls.css', 'home-ui.css', 'practice-responsive.css', 'responsive-ui.css', 'public-name-policy.js',
@@ -29,19 +26,32 @@ function edit(filename, transform) {
   writeFileSync(target, transform(readFileSync(target, 'utf8')));
 }
 
-try {
-  if (!localSource) {
-    mkdirSync(checkout);
-    try {
-      execFileSync('git', ['cat-file', '-e', `${revision}^{commit}`]);
-    } catch {
-      execFileSync('git', ['fetch', '--no-tags', '--depth=1', 'origin', revision], { stdio: 'inherit' });
-    }
-    const archive = join(scratch, 'source.tar');
-    execFileSync('git', ['archive', '--format=tar', `--output=${archive}`, revision]);
-    execFileSync('tar', ['-xf', archive, '-C', checkout]);
-  }
+function browserModuleFilter(entry) {
+  const name = entry.slice(source.length + 1).replaceAll('\\', '/');
+  const suffix = extname(name);
+  if (name === 'tools') return true;
+  if (name.startsWith('tools/') && (name.split('/').length !== 2 || !['.mjs', '.json', '.css'].includes(suffix))) return false;
+  return !isTest.test(name) && !/\/(?:node_modules|verifier|fixtures|__tests__)(?:\/|$)/.test(name) && !['.cjs', '.md', '.cs', '.yml', '.yaml', '.jsonc'].includes(suffix) && !name.endsWith('/package.json');
+}
 
+function filesIn(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    const file = join(directory, entry.name);
+    if (entry.isSymbolicLink()) throw new Error('Unexpected symbolic link in the game build');
+    return entry.isDirectory() ? filesIn(file) : [file];
+  });
+}
+
+function fingerprint(directory) {
+  const digest = createHash('sha256');
+  for (const name of filesIn(directory).map(file => file.slice(directory.length + 1).replaceAll('\\', '/')).sort()) {
+    digest.update(name + '\0');
+    digest.update(createHash('sha256').update(readFileSync(join(directory, name))).digest());
+  }
+  return digest.digest('hex');
+}
+
+{
   rmSync(output, { recursive: true, force: true });
   mkdirSync(output);
   for (const dir of assetDirs) cpSync(join(source, dir), join(output, dir), { recursive: true });
@@ -50,11 +60,7 @@ try {
   }
 
   for (const dir of moduleDirs) {
-    cpSync(join(source, dir), join(output, dir), { recursive: true, filter: entry => {
-      const name = entry.slice(source.length + 1).replaceAll('\\', '/');
-      const suffix = extname(name);
-      return !isTest.test(name) && !/\/(?:node_modules|verifier|fixtures|__tests__)(?:\/|$)/.test(name) && !['.cjs', '.md', '.cs', '.yml', '.yaml', '.jsonc'].includes(suffix) && !name.endsWith('/package.json');
-    } });
+    cpSync(join(source, dir), join(output, dir), { recursive: true, filter: browserModuleFilter });
   }
 
   const official = 'https://www.crazygames.com/game/polytrack';
@@ -86,7 +92,8 @@ try {
     rmSync(candidate);
   }
   writeFileSync(join(output, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
-  console.log(`Prepared the static browser build of ${revision}.`);
-} finally {
-  rmSync(scratch, { recursive: true, force: true });
+  const actualFingerprint = fingerprint(output);
+  const reviewedFingerprint = 'f3802b1b76e5b9ea13f8736d2afcdc5725f663d0787e8a03442db2e793da41ce';
+  if (!localSource && actualFingerprint !== reviewedFingerprint) throw new Error(`Game assets differ from the reviewed build of ${revision}: ${actualFingerprint}`);
+  console.log(`Prepared the static browser build of ${revision} (${actualFingerprint}).`);
 }
