@@ -74,7 +74,8 @@ function fingerprint(directory) {
     html = replaceRequired(html, /<script type="application\/ld\+json">[\s\S]*?<\/script>/, '');
     html = html.replace(/^\s*<(?:meta (?:property="og:|name="twitter:)[^>]+|link rel="canonical"[^>]+)>/gm, '');
     html = replaceRequired(html, /<script>\s*window\.POLYTRACK_TURN_BROKER_URL[\s\S]*?<\/script>/, `<script>\n      window.polytrackModConfiguration = { modName: 'PolyTrack Ranked', author: 'StaticQuasar931' };\n      window.POLYTRACK_DIRECT_PUBLIC_READS = false;\n      window.RTCPeerConnection = undefined;\n      window.webkitRTCPeerConnection = undefined;\n    </script>`);
-    html = replaceRequired(html, /(<div id="staticMenu"[^>]*>\s*<a[^>]*>STATIC \/ GAMES<\/a>)/, '$1\n      <a href="https://lsite-plus.onrender.com/#games">Back to lsite plus</a>\n      <button type="button" id="lsite-open-credits" aria-haspopup="dialog" aria-controls="lsite-game-credits">Game credits</button>');
+    html = replaceRequired(html, /<body>/, `<body>\n    <a id="lsite-back" href="https://lsite-plus.onrender.com/#games" aria-label="Back to lsite plus" title="Back to lsite plus">&larr;</a>`);
+    html = replaceRequired(html, /(<div id="staticMenu"[^>]*>\s*<a[^>]*>STATIC \/ GAMES<\/a>)/, '$1\n      <button type="button" id="lsite-open-credits" aria-haspopup="dialog" aria-controls="lsite-game-credits">Game credits</button>');
     html = replaceRequired(html, /<div id="transition-layer"><\/div>/, `<div id="transition-layer"></div>
     <dialog id="lsite-game-credits" aria-labelledby="lsite-game-credits-title">
       <h2 id="lsite-game-credits-title">Game credits</h2>
@@ -88,7 +89,15 @@ function fingerprint(directory) {
       document.getElementById('lsite-close-credits').addEventListener('click', () => lsiteCredits.close());
 
       window.addEventListener('beforeunload'`);
-    return replaceRequired(html, /      @keyframes menuEnter/, `      #staticMenu { flex-wrap:wrap; gap:4px; max-width:calc(100% - 24px); pointer-events:none; }\n      #staticMenu a, #lsite-open-credits { pointer-events:auto; }
+    return replaceRequired(html, /      @keyframes menuEnter/, `      #lsite-back {
+        position:fixed; top:max(8px, env(safe-area-inset-top)); right:max(8px, env(safe-area-inset-right)); z-index:10000;
+        box-sizing:border-box; display:grid; place-items:center; width:36px; height:36px;
+        border:1px solid #88a9dc; border-radius:6px; background:#172448; color:#edf5ff;
+        font:700 21px/1 system-ui,sans-serif; text-decoration:none;
+      }
+      #lsite-back:hover { background:#30477a; }
+      #lsite-back:focus-visible { outline:2px solid #edf5ff; outline-offset:2px; }
+      #staticMenu { flex-wrap:wrap; gap:4px; max-width:calc(100% - 60px); pointer-events:none; }\n      #staticMenu a, #lsite-open-credits { pointer-events:auto; }
       #lsite-open-credits { padding:0 10px; border:0; background:#1e2d5be6; color:inherit; font:inherit; cursor:pointer; }
       .menu-ui > .warning-message.lsite-original-link, .menu > .warning-message.lsite-original-link {
         box-sizing:border-box; padding:0 12px; font:clamp(11px, 1.35vw, 14px)/1.45 system-ui,sans-serif;
@@ -132,7 +141,7 @@ function fingerprint(directory) {
   }
   writeFileSync(join(output, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
   const actualFingerprint = fingerprint(output);
-  const reviewedFingerprint = 'f91db3143a612eb8b889e8d054dafc1be5c7a718fac53547e02fac7feb2833b0';
+  const reviewedFingerprint = '3b9aca84e7d7ff060ca1186b6f5cc2886b1d08a87446877c3dadfcf7061eeb49';
   if (!localSource && actualFingerprint !== reviewedFingerprint) throw new Error(`Game assets differ from the reviewed build of ${revision}: ${actualFingerprint}`);
   console.log(`Prepared the static browser build of ${revision} (${actualFingerprint}).`);
 }
